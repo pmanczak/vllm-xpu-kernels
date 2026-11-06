@@ -8,6 +8,7 @@
 #include <string>
 
 #include "dispatch_utils.h"
+#include "topk_per_row_dlgw.h"
 #include "utils.h"
 
 namespace vllm {
@@ -828,6 +829,13 @@ void top_k_per_row_decode(
   TORCH_CHECK(indices.size(0) == numRows);
   TORCH_CHECK(indices.size(1) == topK);
 
+  // Delegate-bound path where it is measured to beat the kernels below (BMG,
+  // see the gate in topk_per_row_dlgw.cpp); false: run them.
+  if (topk_dlgw::top_k_per_row_decode_dlgw(
+          logits, next_n, seqLens, indices, numRows, stride0, stride1, topK)) {
+    return;
+  }
+
   constexpr int kSortingAlgorithmThreshold = 12288;
   constexpr int kSplitWorkThreshold = 200 * 1000;
   constexpr int kNumThreadsPerBlock = 512;
@@ -971,6 +979,20 @@ void top_k_per_row_prefill(
 
   TORCH_CHECK(indices.size(0) == numRows);
   TORCH_CHECK(indices.size(1) == topK);
+
+  // Delegate-bound path where it is measured to beat the kernels below (BMG,
+  // see the gate in topk_per_row_dlgw.cpp); false: run them.
+  if (topk_dlgw::top_k_per_row_prefill_dlgw(
+          logits,
+          rowStarts,
+          rowEnds,
+          indices,
+          numRows,
+          stride0,
+          stride1,
+          topK)) {
+    return;
+  }
 
   constexpr int kSortingAlgorithmThreshold = 12288;
   constexpr int kNumThreadsPerBlock = 512;
